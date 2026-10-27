@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#8b2b3d">
+    <title>Berkah.Intann</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (grafik tab Riwayat). Harus sebelum Alpine; keduanya defer sehingga urut dijalankan. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Alpine.js CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: {
+                // Maroon
+                brand: { 50:'#fbf1f3', 100:'#f6dfe3', 200:'#ecbfc7', 300:'#dc939f', 400:'#c4606f', 500:'#a63a4c', 600:'#8b2b3d', 700:'#731f31', 800:'#5e1a2a', 900:'#4a1320' },
+                // Soft pink
+                blush: { 50:'#fff8f9', 100:'#fdeef1', 200:'#fadde3', 300:'#f5c6d0', 400:'#ecaab8' }
+            } } }
+        };
+    </script>
+
+    <!-- Kelas bantu supaya markup lebih ringkas -->
+    <style type="text/tailwindcss">
+        @layer components {
+            .ibub  { @apply h-10 w-10 shrink-0 rounded-xl bg-blush-100 text-brand-700 flex items-center justify-center; }
+            .card  { @apply bg-white rounded-2xl border border-blush-100 shadow-sm; }
+            .lbl   { @apply block text-xs font-semibold text-slate-600 mb-1; }
+            /* text-base di HP mencegah browser meng-zoom otomatis saat input difokus */
+            .inp   { @apply w-full h-11 px-3 rounded-xl border border-blush-300 bg-white text-base sm:text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200; }
+            .btn   { @apply h-11 px-4 rounded-xl text-sm font-semibold transition active:scale-95; }
+            .btn-primary { @apply bg-brand-600 hover:bg-brand-700 text-white shadow; }
+            .btn-ghost   { @apply bg-blush-100 hover:bg-blush-200 text-brand-800; }
+            .btn-danger  { @apply bg-red-600 hover:bg-red-700 text-white shadow; }
+            .icon-btn    { @apply h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-base transition active:scale-95; }
+            .focus-ring  { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300; }
+
+            /* ---- Modal standar: overlay, panel, kepala, isi (scroll), kaki (aksi) ---- */
+            .modal-overlay { @apply fixed inset-0 flex items-end sm:items-center justify-center bg-brand-900/50 backdrop-blur-sm; }
+            .modal-panel   { @apply w-full bg-white shadow-2xl flex flex-col rounded-t-3xl sm:rounded-2xl sm:max-w-lg; }
+            .modal-head    { @apply flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-blush-100; }
+            .modal-body    { @apply overflow-y-auto overscroll-contain px-5 py-5 space-y-5 flex-1; }
+            .modal-foot    { @apply flex gap-2 px-5 pt-4 border-t border-blush-100; }
+            .modal-sec     { @apply text-[11px] font-bold uppercase tracking-wider text-brand-700; }
+            .alert-error   { @apply flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700; }
+        }
+    </style>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<!-- x-effect mengunci scroll halaman saat ada modal terbuka; Esc menutup modal teratas -->
+<body class="bg-blush-50 text-slate-800 font-sans antialiased pb-28 md:pb-12" x-data="olshopApp" x-cloak
+      x-effect="document.documentElement.classList.toggle('overflow-hidden', anyModalOpen)"
+      @keydown.escape.window="closeTopModal()">
+
+    <!-- ================= HEADER ================= -->
+    <header class="bg-brand-600 text-white shadow-md sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="h-8 w-8 shrink-0 rounded-lg bg-white/15 flex items-center justify-center"><span x-html="icon('bag', 'h-5 w-5')" class="inline-flex"></span></span>
+                <span class="text-lg font-bold tracking-wide truncate">Berkah.Intann</span>
+                <span class="hidden sm:inline bg-brand-500 text-xs px-2 py-0.5 rounded-full font-medium">Online & Offline</span>
+            </div>
+            <div class="flex items-center gap-2">
+            <!-- Navigasi tab (desktop). Di HP dipakai bottom bar di bawah. -->
+            <nav class="hidden md:flex gap-2">
+                <template x-for="t in tabs" :key="t.key">
+                    <button @click="activeTab = t.key"
+                        :class="activeTab === t.key ? 'bg-white text-brand-600 font-semibold shadow' : 'hover:bg-brand-500'"
+                        class="px-3 py-1.5 rounded-lg text-sm transition inline-flex items-center gap-1.5">
+                        <span x-html="icon(t.icon, 'h-4 w-4')" class="inline-flex align-middle"></span> <span x-text="t.label"></span>
+                    </button>
+                </template>
+            </nav>
+            <span class="md:hidden text-sm font-medium text-blush-200" x-text="tabs.find(t => t.key === activeTab)?.label"></span>
+            <button type="button" @click="openDataModal()" class="relative h-9 w-9 shrink-0 rounded-lg hover:bg-brand-500 flex items-center justify-center transition focus-ring" aria-label="Data dan backup">
+                <span x-html="icon('database', 'h-5 w-5')" class="inline-flex"></span>
+                <span x-show="backupStale" class="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-amber-300 ring-2 ring-brand-600" aria-hidden="true"></span>
+            </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 mt-5">
+
+        <!-- ================= TAB 1: DASHBOARD ================= -->
+        <div x-show="activeTab === 'dashboard'" class="space-y-5 max-w-6xl mx-auto">
+
+            <!-- Hero: video latar + angka utama + aksi cepat -->
+            <div class="grid gap-4 lg:grid-cols-5">
+            <section class="relative isolate overflow-hidden rounded-3xl text-white shadow-lg aspect-[5/6] lg:col-span-2 bg-gradient-to-br from-brand-900 via-brand-700 to-brand-500" aria-label="Ringkasan bulan ini">
+                <!-- Video (jika file tidak ada, latar gradien di atas tetap tampil) -->
+                <video x-ref="heroVideo" x-show="!videoFailed" :src="videoSrc" :poster="videoPoster"
+                    autoplay muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1"
+                    @error="videoFailed = true"
+                    class="absolute inset-0 -z-10 h-full w-full object-cover"></video>
+                <!-- Lapisan gelap agar teks selalu terbaca -->
+                <div class="absolute inset-0 -z-10 bg-gradient-to-r from-brand-900/85 via-brand-900/50 to-brand-900/10"></div>
+
+                <!-- Tombol suara video (video mulai tanpa suara karena aturan autoplay browser) -->
+                <button type="button" x-show="!videoFailed" @click="toggleSound()"
+                    class="absolute top-3 right-3 h-9 w-9 rounded-full bg-black/25 hover:bg-black/40 backdrop-blur flex items-center justify-center transition focus-ring"
+                    :aria-label="soundOn ? 'Matikan suara video' : 'Nyalakan suara video'" :aria-pressed="soundOn">
+                    <span x-html="icon(soundOn ? 'volume-on' : 'volume-off', 'h-5 w-5')" class="inline-flex"></span>
+                </button>
+
+                <div class="h-full flex flex-col justify-between p-5 sm:p-6">
+                    <!-- Kiri atas: sapaan -->
+                    <div class="pr-12">
+                        <p class="text-sm text-white/80" x-text="greeting + ', ini ringkasan tokomu'"></p>
+                        <p class="text-xs text-white/60" x-text="todayLabel"></p>
+                    </div>
+
+                    <!-- Kiri bawah: omset -->
+                    <div>
+                        <p class="text-[11px] uppercase tracking-wider text-white/70 font-semibold">Omset bulan ini</p>
+                        <p class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 break-words" x-text="formatRupiah(totalMonthRevenue)"></p>
+                        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                            <template x-if="deltaView('revenue', dashMonth)">
+                                <span class="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold">
+                                    <span x-html="icon(deltaArrow(deltaView('revenue', dashMonth).dir), 'h-3.5 w-3.5', 2)" class="inline-flex"></span>
+                                    <span x-text="deltaView('revenue', dashMonth).text"></span>
+                                    <span class="font-normal text-white/70" x-text="dashMonth.prevLabel"></span>
+                                </span>
+                            </template>
+                            <span class="text-white/75 text-xs" x-text="'+ ' + formatRupiah(inProgressRevenue) + ' dalam proses'"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Angka kunci (di samping video pada layar lebar) -->
+            <div class="grid grid-cols-2 gap-3 lg:col-span-3 lg:auto-rows-fr">
+                <div class="card p-4">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Laba bersih</p>
+                        <span class="ibub !h-8 !w-8 !rounded-lg text-emerald-600 !bg-emerald-50" x-html="icon('trend-up', 'h-4 w-4')"></span>
+                    </div>
+                    <p class="text-lg sm:text-2xl font-extrabold mt-2 break-words" :class="totalMonthProfit < 0 ? 'text-red-600' : 'text-emerald-700'" x-text="formatRupiah(totalMonthProfit)"></p>
+                    <template x-if="deltaView('netProfit', dashMonth)">
+                        <p class="text-xs mt-1 inline-flex items-center gap-1" :class="{ 'text-emerald-700': deltaView('netProfit', dashMonth).dir === 'up', 'text-red-600': deltaView('netProfit', dashMonth).dir === 'down', 'text-slate-500': deltaView('netProfit', dashMonth).dir === 'flat' }">
+                            <span x-html="icon(deltaArrow(deltaView('netProfit', dashMonth).dir), 'h-3.5 w-3.5')" class="inline-flex"></span>
+                            <span x-text="deltaView('netProfit', dashMonth).text"></span>
+                            <span class="text-slate-400" x-text="dashMonth.prevLabel"></span>
+                        </p>
+                    </template>
+                    <p x-show="!deltaView('netProfit', dashMonth)" class="text-xs text-slate-400 mt-1">Bulan ini</p>
+                </div>
+
+                <div class="card p-4">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Transaksi selesai</p>
+                        <span class="ibub !h-8 !w-8 !rounded-lg" x-html="icon('check-circle', 'h-4 w-4')"></span>
+                    </div>
+                    <p class="text-lg sm:text-2xl font-extrabold text-brand-700 mt-2" x-text="dashMonth.kpi.count"></p>
+                    <p class="text-xs text-slate-400 mt-1" x-text="dashMonth.kpi.items + ' pcs terjual bulan ini'"></p>
+                </div>
+
+                <button type="button" @click="goTo('sales', 'all')" class="card p-4 text-left transition hover:shadow-md focus-ring">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Pesanan aktif</p>
+                        <span class="ibub !h-8 !w-8 !rounded-lg" x-html="icon('truck', 'h-4 w-4')"></span>
+                    </div>
+                    <p class="text-lg sm:text-2xl font-extrabold text-brand-700 mt-2" x-text="activeSales.length"></p>
+                    <p class="text-xs text-slate-400 mt-1" x-text="formatRupiah(activeValue) + ' sedang berjalan'"></p>
+                </button>
+
+                <button type="button" @click="activeTab = 'products'" class="card p-4 text-left transition hover:shadow-md focus-ring">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Aset stok</p>
+                        <span class="ibub !h-8 !w-8 !rounded-lg" x-html="icon('wallet', 'h-4 w-4')"></span>
+                    </div>
+                    <p class="text-lg sm:text-2xl font-extrabold text-brand-700 mt-2 break-words" x-text="formatRupiah(totalAssetValue)"></p>
+                    <p class="text-xs text-slate-400 mt-1" x-text="products.length + ' produk terdaftar'"></p>
+                </button>
+            </div>
+
+            </div>
+
+            <!-- Pengingat backup -->
+            <div x-show="backupStale" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
+                <span class="h-9 w-9 shrink-0 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center" x-html="icon('shield', 'h-5 w-5')"></span>
+                <p class="min-w-0 flex-1 text-sm text-amber-900 leading-snug" x-text="lastBackup ? 'Backup terakhir ' + backupDays + ' hari lalu. Backup lagi supaya data aman.' : 'Data belum pernah di-backup. Data hanya tersimpan di browser ini.'"></p>
+                <button @click="downloadBackup()" class="btn !h-9 !px-3 !text-xs shrink-0 bg-amber-600 hover:bg-amber-700 text-white focus-ring">Backup</button>
+            </div>
+
+            <!-- Tren 7 hari + perlu perhatian -->
+            <div class="grid gap-4 lg:grid-cols-3">
+                <section class="card p-4 sm:p-5 lg:col-span-2" aria-labelledby="d-trend">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h4 id="d-trend" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600" x-html="icon('trend-up', 'h-5 w-5')"></span>Penjualan 7 hari terakhir</h4>
+                            <p class="text-xs text-slate-500 mt-0.5" x-text="formatRupiah(dashWeek.kpi.revenue) + ' omset dari ' + dashWeek.kpi.count + ' transaksi selesai'"></p>
+                        </div>
+                        <button @click="activeTab = 'history'" class="shrink-0 text-xs font-semibold text-brand-600 hover:text-brand-800 py-1 inline-flex items-center gap-1 focus-ring rounded">
+                            Lihat riwayat <span x-html="icon('arrow-right', 'h-3.5 w-3.5', 2)" class="inline-flex"></span></button>
+                    </div>
+                    <div x-show="dashWeek.kpi.count && chartsAvailable">
+                        <div class="flex gap-4 mt-3 text-xs text-slate-600">
+                            <span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded" style="background:#8b2b3d"></span>Omset</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded" style="background:#1baf7a"></span>Laba bersih</span>
+                        </div>
+                        <div class="relative mt-2 h-52"><canvas id="chart-dash" role="img" aria-label="Grafik omset dan laba bersih 7 hari terakhir"></canvas></div>
+                    </div>
+                    <div x-show="dashWeek.kpi.count && !chartsAvailable" class="mt-3 max-h-52 overflow-y-auto rounded-xl border border-blush-100">
+                        <table class="w-full text-sm"><tbody>
+                            <template x-for="(l, i) in dashWeek.trend.labels" :key="i">
+                                <tr class="border-t first:border-0 border-blush-100"><td class="px-3 py-1.5 text-slate-600" x-text="l"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="formatRupiah(dashWeek.trend.omset[i])"></td></tr>
+                            </template>
+                        </tbody></table>
+                    </div>
+                    <div x-show="!dashWeek.kpi.count" class="mt-4 rounded-xl bg-blush-50 border border-dashed border-blush-300 p-6 text-center text-sm text-slate-500">
+                        Belum ada transaksi selesai dalam 7 hari terakhir.
+                    </div>
+                </section>
+
+                <section class="card p-4 sm:p-5" aria-labelledby="d-attn">
+                    <h4 id="d-attn" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600" x-html="icon('alert', 'h-5 w-5')"></span>Perlu perhatian</h4>
+                    <ul class="mt-3 space-y-2">
+                        <template x-for="a in attention" :key="a.key">
+                            <li>
+                                <button type="button" @click="goTo(a.tab, a.filter)" class="w-full flex items-center gap-3 rounded-xl border border-blush-100 hover:bg-blush-50 px-3 py-2.5 text-left transition focus-ring">
+                                    <span class="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center"
+                                        :class="{ 'bg-amber-50 text-amber-600': a.tone === 'amber', 'bg-blush-100 text-brand-700': a.tone === 'brand', 'bg-red-50 text-red-600': a.tone === 'red' }"
+                                        x-html="icon(a.icon, 'h-5 w-5')"></span>
+                                    <span class="min-w-0 flex-1 text-sm text-slate-700 leading-snug" x-text="a.label"></span>
+                                    <span class="text-lg font-bold text-brand-800" x-text="a.count"></span>
+                                    <span class="text-slate-300" x-html="icon('chevron', 'h-4 w-4', 2)"></span>
+                                </button>
+                            </li>
+                        </template>
+                    </ul>
+                    <div x-show="attention.length === 0" class="mt-4 text-center text-sm text-slate-500 py-6">
+                        <span class="mx-auto h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2" x-html="icon('check-circle', 'h-6 w-6')"></span>
+                        Semua beres. Tidak ada yang perlu ditindaklanjuti.
+                    </div>
+                </section>
+            </div>
+
+            <!-- Transaksi terbaru + stok menipis -->
+            <div class="grid gap-4 lg:grid-cols-2">
+                <section class="card p-4 sm:p-5" aria-labelledby="d-recent">
+                    <div class="flex items-center justify-between gap-3">
+                        <h4 id="d-recent" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600" x-html="icon('receipt', 'h-5 w-5')"></span>Transaksi terbaru</h4>
+                        <button @click="activeTab = 'history'" class="text-xs font-semibold text-brand-600 hover:text-brand-800 py-1 focus-ring rounded">Semua</button>
+                    </div>
+                    <ul class="mt-2 divide-y divide-blush-100">
+                        <template x-for="s in recentSales" :key="s.id">
+                            <li>
+                                <button type="button" @click="openDetail(s)" class="w-full flex items-center gap-3 py-3 text-left hover:bg-blush-50 -mx-2 px-2 rounded-lg transition focus-ring">
+                                    <span class="h-10 w-10 shrink-0 rounded-xl bg-blush-100 text-brand-700 flex items-center justify-center" x-html="icon(channelIcon(s), 'h-5 w-5')"></span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex items-center gap-2">
+                                            <span class="font-semibold text-sm text-slate-800 truncate" x-text="s.channel"></span>
+                                            <span x-show="!isOffline(s) || s.status === 'Batal'" class="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" :class="statusInfo[s.status]?.badge">
+                                                <span x-html="icon(statusInfo[s.status]?.icon, 'h-3 w-3')" class="inline-flex"></span><span x-text="statusInfo[s.status]?.short"></span></span>
+                                        </span>
+                                        <span class="block text-xs text-slate-400 truncate" x-text="formatDate(s.date)"></span>
+                                    </span>
+                                    <span class="text-sm font-bold shrink-0" :class="s.status === 'Batal' ? 'text-slate-400 line-through' : 'text-brand-700'" x-text="formatRupiah(s.summary.gross_revenue)"></span>
+                                </button>
+                            </li>
+                        </template>
+                    </ul>
+                    <div x-show="recentSales.length === 0" class="mt-3 rounded-xl bg-blush-50 border border-dashed border-blush-300 p-6 text-center text-sm text-slate-500">
+                        Belum ada transaksi.
+                        <button @click="openSaleModal()" class="block mx-auto mt-2 text-brand-600 font-semibold">Catat penjualan pertama</button>
+                    </div>
+                </section>
+
+                <section class="card p-4 sm:p-5" aria-labelledby="d-low">
+                    <div class="flex items-center justify-between gap-3">
+                        <h4 id="d-low" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-amber-600" x-html="icon('alert', 'h-5 w-5')"></span>Stok hampir habis</h4>
+                        <span class="text-xs text-slate-400">≤ 3 pcs</span>
+                    </div>
+                    <ul class="mt-2 divide-y divide-blush-100">
+                        <template x-for="p in lowStockProducts" :key="p.id">
+                            <li class="flex items-center gap-3 py-3">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-semibold text-slate-800 truncate" x-text="p.name"></p>
+                                    <div class="mt-1.5 flex items-center gap-2">
+                                        <div class="h-1.5 flex-1 rounded-full bg-blush-200 overflow-hidden"><div class="h-full rounded-full" :class="p.stock === 0 ? 'bg-red-600' : 'bg-amber-500'" :style="'width:' + Math.max(p.stock, 0) / 3 * 100 + '%'"></div></div>
+                                        <span class="text-xs font-semibold" :class="p.stock === 0 ? 'text-red-600' : 'text-amber-700'" x-text="p.stock === 0 ? 'Habis' : 'Sisa ' + p.stock"></span>
+                                    </div>
+                                </div>
+                                <button @click="openPurchaseModal(p)" class="btn btn-ghost !h-9 !px-3 !text-xs shrink-0 inline-flex items-center gap-1.5 focus-ring"><span x-html="icon('cart', 'h-4 w-4')" class="inline-flex"></span> Restok</button>
+                            </li>
+                        </template>
+                    </ul>
+                    <div x-show="lowStockProducts.length === 0" class="mt-3 text-center text-sm text-slate-500 py-6">
+                        <span class="mx-auto h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2" x-html="icon('sparkles', 'h-6 w-6')"></span>
+                        Semua stok produk aman.
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- ================= TAB 2: PRODUK ================= -->
+        <div x-show="activeTab === 'products'" class="space-y-4 pb-20 md:pb-0">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-2xl font-bold text-brand-900 flex items-center gap-2.5"><span class="ibub !h-9 !w-9"><span x-html="icon('box', 'h-5 w-5')" class="inline-flex"></span></span>Produk</h3>
+                    <p class="text-sm text-slate-500" x-text="products.length + ' produk terdaftar'"></p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="exportProducts()" class="btn btn-ghost !h-10 !px-3 !text-xs inline-flex items-center gap-1.5 focus-ring"><span x-html="icon('download', 'h-4 w-4')" class="inline-flex"></span> Ekspor CSV</button>
+                    <button @click="openProductModal()" class="btn btn-primary !h-10 hidden md:inline-flex items-center gap-1.5 focus-ring">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                        Tambah Produk
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <template x-for="p in products" :key="p.id">
+                    <article class="card p-4 transition hover:shadow-md">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <h4 class="font-semibold truncate" x-text="p.name"></h4>
+                                <p class="text-xs text-slate-400" x-text="p.category"></p>
+                            </div>
+                            <span :class="p.stock <= 3 ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'" class="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-semibold" x-text="p.stock + ' Pcs'"></span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                            <div>
+                                <p class="text-[11px] text-slate-400 uppercase">HPP</p>
+                                <p class="font-medium text-slate-600" x-text="formatRupiah(p.base_price)"></p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] text-slate-400 uppercase">Harga Jual</p>
+                                <p class="font-semibold text-brand-600" x-text="formatRupiah(p.sell_price)"></p>
+                            </div>
+                        </div>
+                        <!-- Margin per pcs; merah kalau jual di bawah HPP -->
+                        <p class="text-xs mt-2 flex items-center gap-1" :class="p.sell_price < p.base_price ? 'text-red-600 font-semibold' : 'text-slate-400'">
+                            <span x-show="p.sell_price < p.base_price" x-html="icon('alert', 'h-3.5 w-3.5')" class="inline-flex"></span>
+                            <span x-text="'Margin ' + formatRupiah(p.sell_price - p.base_price) + ' / pcs' + (p.sell_price < p.base_price ? ' (di bawah HPP)' : '')"></span>
+                        </p>
+                        <div class="flex gap-2 mt-3 pt-3 border-t border-blush-100">
+                            <button @click="openProductModal(p)" class="btn btn-ghost !h-10 flex-1 !text-xs inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('edit', 'h-4 w-4')" class="inline-flex"></span> Edit</button>
+                            <button @click="deleteProduct(p)" class="btn !h-10 flex-1 !text-xs bg-white border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('trash', 'h-4 w-4')" class="inline-flex"></span> Hapus</button>
+                        </div>
+                    </article>
+                </template>
+            </div>
+
+            <div x-show="products.length === 0" class="rounded-2xl bg-white border border-dashed border-blush-300 p-10 text-center">
+                <div class="mx-auto h-14 w-14 rounded-full bg-blush-100 text-brand-600 flex items-center justify-center"><span x-html="icon('box', 'h-7 w-7')" class="inline-flex"></span></div>
+                <p class="mt-3 font-semibold text-slate-700">Belum ada produk</p>
+                <p class="text-sm text-slate-400 mt-1">Tambahkan produk pertama untuk mulai mengelola stok.</p>
+                <button @click="openProductModal()" class="btn btn-primary mt-4 inline-flex items-center gap-1.5"><span x-html="icon('plus', 'h-4 w-4')" class="inline-flex"></span> Tambah produk</button>
+            </div>
+        </div>
+
+        <!-- ================= TAB 3: RESTOK ================= -->
+        <div x-show="activeTab === 'purchases'" class="space-y-4 max-w-4xl mx-auto pb-20 md:pb-0">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-2xl font-bold text-brand-900 flex items-center gap-2.5"><span class="ibub !h-9 !w-9"><span x-html="icon('cart', 'h-5 w-5')" class="inline-flex"></span></span>Restok</h3>
+                    <p class="text-sm text-slate-500" x-text="purchases.length + ' catatan belanja'"></p>
+                </div>
+                <button @click="openPurchaseModal()" class="btn btn-primary !h-10 hidden md:inline-flex items-center gap-1.5 focus-ring">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                    Catat Restok
+                </button>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <template x-for="r in purchases" :key="r.id">
+                    <article class="card p-4">
+                        <div class="flex justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="font-bold text-slate-700 text-sm" x-text="r.id"></p>
+                                <p class="text-xs text-brand-600 font-medium truncate flex items-center gap-1"><span class="inline-flex"><span x-html="icon('tag', 'h-3.5 w-3.5')" class="inline-flex"></span></span><span class="truncate" x-text="r.supplier"></span></p>
+                            </div>
+                            <p class="text-[11px] text-slate-400 text-right" x-text="formatDate(r.date)"></p>
+                        </div>
+                        <p class="text-sm text-slate-600 mt-2" x-text="r.items.map(i => i.product_name + ' ×' + i.qty).join(', ')"></p>
+                        <div class="flex justify-between text-sm mt-3 pt-3 border-t border-blush-100">
+                            <span class="text-slate-500">Ongkir <span x-text="formatRupiah(r.shipping_cost)"></span></span>
+                            <span class="font-semibold text-brand-700" x-text="formatRupiah(r.total_spend)"></span>
+                        </div>
+                        <div class="flex gap-2 mt-3 pt-3 border-t border-blush-100">
+                            <button @click="editPurchase(r)" class="btn btn-ghost !h-10 flex-1 !text-xs inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('edit', 'h-4 w-4')" class="inline-flex"></span> Edit</button>
+                            <button @click="deletePurchase(r)" class="btn !h-10 flex-1 !text-xs bg-white border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('trash', 'h-4 w-4')" class="inline-flex"></span> Hapus</button>
+                        </div>
+                    </article>
+                </template>
+            </div>
+
+            <div x-show="purchases.length === 0" class="rounded-2xl bg-white border border-dashed border-blush-300 p-10 text-center">
+                <div class="mx-auto h-14 w-14 rounded-full bg-blush-100 text-brand-600 flex items-center justify-center"><span x-html="icon('cart', 'h-7 w-7')" class="inline-flex"></span></div>
+                <p class="mt-3 font-semibold text-slate-700">Belum ada riwayat restok</p>
+                <p class="text-sm text-slate-400 mt-1">Catat belanja barang untuk menambah stok dan menghitung HPP otomatis.</p>
+                <button @click="openPurchaseModal()" class="btn btn-primary mt-4 inline-flex items-center gap-1.5"><span x-html="icon('plus', 'h-4 w-4')" class="inline-flex"></span> Catat restok pertama</button>
+            </div>
+        </div>
+
+        <!-- ================= TAB 4: PENJUALAN ================= -->
+        <div x-show="activeTab === 'sales'" class="max-w-4xl mx-auto pb-20 md:pb-0">
+
+            <!-- Judul + aksi -->
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-2xl font-bold text-brand-900 flex items-center gap-2.5"><span class="ibub !h-9 !w-9"><span x-html="icon('cash', 'h-5 w-5')" class="inline-flex"></span></span>Penjualan</h3>
+                    <p class="text-sm text-slate-500">Pesanan online yang sedang berjalan</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="openSaleModal()" class="btn btn-primary !h-10 hidden md:inline-flex items-center gap-1.5 focus-ring">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                        Catat Penjualan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Ringkasan singkat -->
+            <div class="grid grid-cols-2 gap-3 mt-4">
+                <div class="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 text-white shadow-sm">
+                    <p class="text-[11px] uppercase tracking-wider text-brand-200 flex items-center gap-1.5"><span x-html="icon('cash', 'h-4 w-4')" class="inline-flex"></span> Nilai pesanan aktif</p>
+                    <p class="text-lg sm:text-xl font-bold mt-1 break-words" x-text="formatRupiah(activeValue)"></p>
+                </div>
+                <div class="rounded-2xl bg-white border border-blush-200 p-4">
+                    <p class="text-[11px] uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><span class="text-brand-600"><span x-html="icon('truck', 'h-4 w-4')" class="inline-flex"></span></span> Pesanan aktif</p>
+                    <p class="text-lg sm:text-xl font-bold text-brand-700 mt-1" x-text="activeSales.length + ' pesanan'"></p>
+                </div>
+            </div>
+
+            <!-- Filter: tab bergaris bawah (menempel di bawah header saat di-scroll) -->
+            <div class="sticky top-14 z-30 bg-blush-50 -mx-4 px-4 mt-5">
+                <div class="flex gap-6 overflow-x-auto border-b border-blush-200" style="scrollbar-width: none;">
+                    <template x-for="f in filterOptions" :key="f.key">
+                        <button @click="saleFilter = f.key"
+                            class="shrink-0 py-3 text-sm whitespace-nowrap border-b-2 transition-colors focus-ring"
+                            :class="saleFilter === f.key
+                                ? 'border-brand-600 text-brand-700 font-semibold'
+                                : 'border-transparent text-slate-500 hover:text-brand-600'">
+                            <span x-text="f.label"></span>
+                            <span class="ml-0.5 text-xs" :class="saleFilter === f.key ? 'text-brand-500' : 'text-slate-400'" x-text="saleCounts[f.key]"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Daftar transaksi -->
+            <div class="grid gap-3 md:grid-cols-2 mt-4">
+                <template x-for="s in filteredSales" :key="s.id">
+                    <article class="rounded-2xl bg-white border border-blush-100 shadow-sm p-4 transition hover:shadow-md">
+
+                        <!-- Kepala kartu: avatar channel, nama, tanggal, status -->
+                        <div class="flex items-start gap-3">
+                            <div class="h-10 w-10 shrink-0 rounded-xl bg-blush-100 text-brand-700 flex items-center justify-center" x-html="icon(channelIcon(s), 'h-5 w-5')"></div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="font-semibold text-slate-800 truncate" x-text="s.channel"></p>
+                                    <!-- Online: badge status. Offline: tanpa status (kecuali data lama yang dibatalkan). -->
+                                    <span x-show="!isOffline(s) || s.status === 'Batal'"
+                                        class="shrink-0 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                                        :class="statusInfo[s.status]?.badge"><span x-html="icon(statusInfo[s.status]?.icon, 'h-3 w-3')" class="inline-flex"></span><span x-text="statusInfo[s.status]?.label"></span></span>
+                                </div>
+                                <p class="text-xs text-slate-400"><span x-text="s.id"></span> · <span x-text="formatDate(s.date)"></span></p>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-slate-600 mt-3 line-clamp-2" x-text="s.items.map(i => i.product_name + ' ×' + i.qty).join(', ')"></p>
+
+                        <!-- Nominal -->
+                        <div class="mt-3 flex items-end justify-between gap-3">
+                            <div>
+                                <p class="text-[11px] uppercase tracking-wider text-slate-400">Total</p>
+                                <p class="text-lg font-bold text-brand-700" x-text="formatRupiah(s.summary.gross_revenue)"></p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[11px] uppercase tracking-wider text-slate-400">Laba bersih</p>
+                                <p class="text-sm font-semibold" :class="s.summary.net_profit < 0 ? 'text-red-600' : 'text-emerald-600'" x-text="formatRupiah(s.summary.net_profit)"></p>
+                            </div>
+                        </div>
+
+                        <!-- Progres pesanan online -->
+                        <div x-show="!isOffline(s) && s.status !== 'Batal'" class="mt-4">
+                            <div class="flex gap-1">
+                                <template x-for="(st, i) in statusFlow" :key="st">
+                                    <div class="h-1.5 flex-1 rounded-full" :class="i <= statusFlow.indexOf(s.status) ? 'bg-brand-600' : 'bg-blush-200'"></div>
+                                </template>
+                            </div>
+                            <div class="grid grid-cols-4 mt-1.5">
+                                <template x-for="(st, i) in statusFlow" :key="st">
+                                    <span class="text-[10px] flex flex-col items-start gap-0.5" :class="i <= statusFlow.indexOf(s.status) ? 'text-brand-700 font-semibold' : 'text-slate-400'"><span x-html="icon(statusInfo[st].icon, 'h-3.5 w-3.5')" class="inline-flex"></span><span x-text="statusInfo[st].short"></span></span>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Tombol lanjut status (hanya online yang belum selesai/batal) -->
+                        <button x-show="nextStatus(s)" @click="advanceSale(s)"
+                            class="mt-4 w-full h-11 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm transition active:scale-[.98] focus-ring"
+                            x-text="statusInfo[s.status]?.action"></button>
+
+                        <!-- Aksi sekunder -->
+                        <div class="flex items-center gap-1 mt-3 pt-3 border-t border-blush-100">
+                            <button x-show="canCancel(s)" @click="cancelSale(s)" class="px-1 py-2 text-xs font-medium text-slate-400 hover:text-brand-600 transition focus-ring rounded">Batalkan pesanan</button>
+                            <div class="flex-1"></div>
+                            <button @click="openSaleModal(s)" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Edit transaksi">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+                            </button>
+                            <button @click="deleteSale(s)" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Hapus transaksi">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                            </button>
+                        </div>
+                    </article>
+                </template>
+            </div>
+
+            <!-- Keadaan kosong -->
+            <div x-show="filteredSales.length === 0" class="mt-4 rounded-2xl bg-white border border-dashed border-blush-300 p-10 text-center">
+                <div class="mx-auto h-14 w-14 rounded-full bg-blush-100 text-brand-600 flex items-center justify-center"><span x-html="icon('receipt', 'h-7 w-7')" class="inline-flex"></span></div>
+                <p class="mt-3 font-semibold text-slate-700" x-text="activeSales.length === 0 ? 'Tidak ada pesanan aktif' : 'Tidak ada pesanan di tahap ini'"></p>
+                <p class="text-sm text-slate-400 mt-1" x-text="activeSales.length === 0 ? 'Pesanan yang sudah selesai, dibatalkan, dan penjualan offline ada di tab Riwayat.' : 'Coba pilih tahap lain.'"></p>
+                <div class="mt-4 flex flex-col sm:flex-row gap-2 justify-center">
+                    <button x-show="activeSales.length === 0" @click="openSaleModal()" class="btn btn-primary inline-flex items-center justify-center gap-1.5"><span x-html="icon('plus', 'h-4 w-4')" class="inline-flex"></span> Catat penjualan</button>
+                    <button @click="activeTab = 'history'" class="btn btn-ghost inline-flex items-center justify-center gap-1.5"><span x-html="icon('receipt', 'h-4 w-4')" class="inline-flex"></span> Buka Riwayat</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 5: RIWAYAT ================= -->
+        <div x-show="activeTab === 'history'" class="max-w-4xl mx-auto pb-20 md:pb-0">
+
+            <!-- Judul + aksi -->
+            <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 class="text-2xl font-bold text-brand-900 flex items-center gap-2.5"><span class="ibub !h-9 !w-9"><span x-html="icon('receipt', 'h-5 w-5')" class="inline-flex"></span></span>Riwayat</h3>
+                    <p class="text-sm text-slate-500 truncate" x-text="report.rangeLabel"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button @click="exportHistoryExcel()" class="btn btn-ghost !h-10 !px-3 !text-xs inline-flex items-center gap-1.5 focus-ring"><span x-html="icon('sheet', 'h-4 w-4')" class="inline-flex"></span> Excel</button>
+                    <button @click="exportHistory()" class="btn btn-ghost !h-10 !px-3 !text-xs inline-flex items-center gap-1.5 focus-ring"><span x-html="icon('download', 'h-4 w-4')" class="inline-flex"></span> CSV</button>
+                </div>
+            </div>
+
+            <!-- Filter periode: satu baris di atas, berlaku untuk semua yang ada di bawahnya -->
+            <div class="sticky top-14 z-30 bg-blush-50 -mx-4 px-4 mt-4">
+                <div class="flex gap-6 overflow-x-auto border-b border-blush-200" style="scrollbar-width: none;">
+                    <template x-for="p in periods" :key="p.key">
+                        <button @click="setPeriod(p.key)"
+                            class="shrink-0 py-3 text-sm whitespace-nowrap border-b-2 transition-colors focus-ring"
+                            :class="period === p.key ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-slate-500 hover:text-brand-600'"
+                            x-text="p.label"></button>
+                    </template>
+                </div>
+            </div>
+            <div x-show="period === 'custom'" class="grid grid-cols-2 gap-3 mt-3">
+                <div><label class="lbl" for="h-from">Dari tanggal</label><input id="h-from" type="date" x-model="customFrom" :max="customTo || null" class="inp"></div>
+                <div><label class="lbl" for="h-to">Sampai tanggal</label><input id="h-to" type="date" x-model="customTo" :min="customFrom || null" class="inp"></div>
+            </div>
+
+            <!-- Angka utama -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                <div class="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-4 text-white shadow-sm col-span-2 lg:col-span-1">
+                    <p class="text-[11px] uppercase tracking-wider text-brand-200 flex items-center gap-1.5"><span x-html="icon('cash', 'h-4 w-4')" class="inline-flex"></span> Omset</p>
+                    <p class="text-2xl font-extrabold mt-1 break-words" x-text="formatRupiah(report.kpi.revenue)"></p>
+                    <template x-if="deltaView('revenue')">
+                        <p class="text-xs mt-1 text-white/90"><span class="inline-flex align-middle" x-html="icon(deltaArrow(deltaView('revenue').dir), 'h-3.5 w-3.5', 2)"></span> <span x-text="deltaView('revenue').text"></span> <span class="text-brand-200" x-text="report.prevLabel"></span></p>
+                    </template>
+                </div>
+                <div class="card p-4">
+                    <p class="text-[11px] uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><span class="text-emerald-600"><span x-html="icon('trend-up', 'h-4 w-4')" class="inline-flex"></span></span> Laba bersih</p>
+                    <p class="text-lg sm:text-xl font-extrabold mt-1 break-words" :class="report.kpi.netProfit < 0 ? 'text-red-600' : 'text-emerald-700'" x-text="formatRupiah(report.kpi.netProfit)"></p>
+                    <template x-if="deltaView('netProfit')">
+                        <p class="text-xs mt-1" :class="{ 'text-emerald-700': deltaView('netProfit').dir === 'up', 'text-red-600': deltaView('netProfit').dir === 'down', 'text-slate-500': deltaView('netProfit').dir === 'flat' }"><span class="inline-flex align-middle" x-html="icon(deltaArrow(deltaView('netProfit').dir), 'h-3.5 w-3.5')"></span> <span x-text="deltaView('netProfit').text"></span></p>
+                    </template>
+                    <p class="text-xs text-slate-400 mt-0.5" x-text="'Margin ' + pct(report.kpi.netMargin)"></p>
+                </div>
+                <div class="card p-4">
+                    <p class="text-[11px] uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><span class="text-brand-600"><span x-html="icon('check-circle', 'h-4 w-4')" class="inline-flex"></span></span> Transaksi selesai</p>
+                    <p class="text-lg sm:text-xl font-extrabold text-brand-700 mt-1" x-text="report.kpi.count"></p>
+                    <template x-if="deltaView('count')">
+                        <p class="text-xs mt-1" :class="{ 'text-emerald-700': deltaView('count').dir === 'up', 'text-red-600': deltaView('count').dir === 'down', 'text-slate-500': deltaView('count').dir === 'flat' }"><span class="inline-flex align-middle" x-html="icon(deltaArrow(deltaView('count').dir), 'h-3.5 w-3.5')"></span> <span x-text="deltaView('count').text"></span></p>
+                    </template>
+                    <p class="text-xs text-slate-400 mt-0.5" x-text="report.kpi.items + ' pcs terjual'"></p>
+                </div>
+                <div class="card p-4 col-span-2 lg:col-span-1">
+                    <p class="text-[11px] uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><span class="text-brand-600"><span x-html="icon('calculator', 'h-4 w-4')" class="inline-flex"></span></span> Rata-rata / transaksi</p>
+                    <p class="text-lg sm:text-xl font-extrabold text-brand-700 mt-1 break-words" x-text="formatRupiah(report.kpi.aov)"></p>
+                    <p class="text-xs text-slate-400 mt-0.5" x-text="'Laba ' + formatRupiah(report.kpi.avgProfit) + ' / transaksi'"></p>
+                </div>
+            </div>
+
+            <!-- Hitung-hitungan bisnis -->
+            <section class="card p-4 sm:p-5 mt-4" aria-labelledby="h-calc">
+                <h4 id="h-calc" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600"><span x-html="icon('calculator', 'h-5 w-5')" class="inline-flex"></span></span>Hitung-hitungan bisnis</h4>
+                <p class="text-xs text-slate-500 mt-0.5">Ke mana omset pergi: modal barang, biaya, dan yang tersisa sebagai laba.</p>
+
+                <div x-show="report.stack.segments.length" class="mt-4">
+                    <!-- Batang komposisi; jeda 2px putih antar segmen, label hanya jika muat -->
+                    <div class="flex h-6 gap-0.5 rounded-lg overflow-hidden" role="img"
+                         :aria-label="report.stack.segments.map(g => g.label + ' ' + pct(g.pct)).join(', ')">
+                        <template x-for="g in report.stack.segments" :key="g.key">
+                            <div class="h-full flex items-center justify-center text-[11px] font-semibold overflow-hidden whitespace-nowrap"
+                                 :style="'width:' + g.pct + '%; background:' + g.color + '; color:' + g.text"
+                                 x-text="g.pct >= 14 ? Math.round(g.pct) + '%' : ''"></div>
+                        </template>
+                    </div>
+                    <ul class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
+                        <template x-for="g in report.stack.segments" :key="g.key">
+                            <li class="flex items-center gap-2 min-w-0">
+                                <span class="h-2.5 w-2.5 rounded-sm shrink-0" :style="'background:' + g.color"></span>
+                                <span class="text-slate-600 truncate" x-text="g.label"></span>
+                                <span class="ml-auto font-semibold text-slate-800" x-text="pct(g.pct)"></span>
+                            </li>
+                        </template>
+                    </ul>
+                    <p x-show="report.stack.loss > 0" class="mt-3 alert-error">
+                        <span class="shrink-0 mt-px"><span x-html="icon('alert', 'h-5 w-5')" class="inline-flex"></span></span>
+                        <span x-text="'Rugi ' + formatRupiah(report.stack.loss) + ': modal dan biaya lebih besar dari omset.'"></span>
+                    </p>
+                </div>
+                <p x-show="!report.stack.segments.length" class="mt-4 text-sm text-slate-400">Belum ada transaksi selesai di periode ini.</p>
+
+                <!-- Rincian angka -->
+                <dl class="mt-4 text-sm divide-y divide-blush-100 border-t border-blush-100">
+                    <div class="flex justify-between py-2"><dt class="text-slate-600">Omset</dt><dd class="font-semibold text-slate-800" x-text="formatRupiah(report.kpi.revenue)"></dd></div>
+                    <div class="flex justify-between py-2"><dt class="text-slate-500">− Modal barang (HPP)</dt><dd class="text-slate-700" x-text="formatRupiah(report.kpi.hpp)"></dd></div>
+                    <div class="flex justify-between py-2 bg-blush-50 -mx-2 px-2 rounded-lg"><dt class="font-semibold text-brand-800">= Laba kotor <span class="font-normal text-xs text-slate-500" x-text="'(margin ' + pct(report.kpi.grossMargin) + ')'"></span></dt><dd class="font-semibold text-brand-800" x-text="formatRupiah(report.kpi.grossProfit)"></dd></div>
+                    <div class="flex justify-between py-2"><dt class="text-slate-500">− Packing</dt><dd class="text-slate-700" x-text="formatRupiah(report.kpi.packing)"></dd></div>
+                    <div class="flex justify-between py-2"><dt class="text-slate-500">− Admin marketplace</dt><dd class="text-slate-700" x-text="formatRupiah(report.kpi.admin)"></dd></div>
+                    <div class="flex justify-between py-2"><dt class="text-slate-500">− Ongkir ditanggung seller</dt><dd class="text-slate-700" x-text="formatRupiah(report.kpi.shipping)"></dd></div>
+                    <div class="flex justify-between py-2 bg-blush-100 -mx-2 px-2 rounded-lg"><dt class="font-bold text-brand-900">= Laba bersih <span class="font-normal text-xs text-slate-500" x-text="'(margin ' + pct(report.kpi.netMargin) + ')'"></span></dt><dd class="font-bold" :class="report.kpi.netProfit < 0 ? 'text-red-600' : 'text-brand-900'" x-text="formatRupiah(report.kpi.netProfit)"></dd></div>
+                </dl>
+                <p class="text-xs text-slate-400 mt-3" x-text="'Pesanan dibatalkan: ' + report.kpi.cancelled + ' (' + pct(report.kpi.cancelRate) + ' dari semua pesanan yang sudah selesai atau batal). Hanya transaksi selesai yang dihitung sebagai omset.'"></p>
+            </section>
+
+            <!-- Grafik -->
+            <section class="card p-4 sm:p-5 mt-4" aria-labelledby="h-trend">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <h4 id="h-trend" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600"><span x-html="icon('trend-up', 'h-5 w-5')" class="inline-flex"></span></span>Tren penjualan</h4>
+                        <p class="text-xs text-slate-500 mt-0.5" x-text="report.trend.unitLabel || 'Omset dan laba bersih'"></p>
+                    </div>
+                    <button x-show="chartsAvailable && report.kpi.count" @click="chartTable = !chartTable"
+                        class="shrink-0 text-xs font-semibold text-brand-600 hover:text-brand-800 py-1 focus-ring rounded"
+                        x-text="chartTable ? 'Lihat grafik' : 'Lihat tabel'"></button>
+                </div>
+
+                <p x-show="!report.kpi.count" class="mt-4 text-sm text-slate-400">Belum ada transaksi selesai di periode ini.</p>
+                <p x-show="!chartsAvailable && report.kpi.count" class="mt-3 text-xs text-slate-500">Grafik tidak bisa dimuat (periksa koneksi internet). Data tampil sebagai tabel.</p>
+
+                <div x-show="report.kpi.count">
+                    <!-- Legenda (kunci garis) -->
+                    <div x-show="!showTables" class="flex gap-4 mt-3 text-xs text-slate-600">
+                        <span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded" style="background:#8b2b3d"></span>Omset</span>
+                        <span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 rounded" style="background:#1baf7a"></span>Laba bersih</span>
+                    </div>
+                    <div x-show="!showTables" class="relative mt-2 h-60"><canvas id="chart-trend" role="img" aria-label="Grafik tren omset dan laba bersih"></canvas></div>
+
+                    <div x-show="showTables" class="mt-3 max-h-64 overflow-y-auto rounded-xl border border-blush-100">
+                        <table class="w-full text-sm">
+                            <thead class="sticky top-0 bg-blush-100 text-xs text-slate-600"><tr>
+                                <th class="text-left font-semibold px-3 py-2">Periode</th><th class="text-right font-semibold px-3 py-2">Omset</th><th class="text-right font-semibold px-3 py-2">Laba bersih</th><th class="text-right font-semibold px-3 py-2">Trx</th></tr></thead>
+                            <tbody>
+                                <template x-for="(l, i) in report.trend.labels" :key="i">
+                                    <tr class="border-t border-blush-100">
+                                        <td class="px-3 py-1.5 text-slate-600" x-text="l"></td>
+                                        <td class="px-3 py-1.5 text-right tabular-nums" x-text="formatRupiah(report.trend.omset[i])"></td>
+                                        <td class="px-3 py-1.5 text-right tabular-nums" :class="report.trend.laba[i] < 0 ? 'text-red-600' : ''" x-text="formatRupiah(report.trend.laba[i])"></td>
+                                        <td class="px-3 py-1.5 text-right tabular-nums" x-text="report.trend.count[i]"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <div x-show="report.kpi.count" class="grid gap-4 md:grid-cols-2 mt-4">
+                <section class="card p-4 sm:p-5" aria-labelledby="h-chan">
+                    <h4 id="h-chan" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600"><span x-html="icon('store', 'h-5 w-5')" class="inline-flex"></span></span>Omset per channel</h4>
+                    <div x-show="!showTables" class="relative mt-3" :style="'height:' + (report.channels.length * 38 + 16) + 'px'"><canvas id="chart-channel" role="img" aria-label="Grafik omset per channel"></canvas></div>
+                    <table x-show="showTables" class="w-full text-sm mt-3">
+                        <thead class="text-xs text-slate-600 bg-blush-100"><tr><th class="text-left font-semibold px-3 py-2 rounded-l-lg">Channel</th><th class="text-right font-semibold px-3 py-2">Omset</th><th class="text-right font-semibold px-3 py-2 rounded-r-lg">Trx</th></tr></thead>
+                        <tbody><template x-for="c in report.channels" :key="c.channel"><tr class="border-t border-blush-100"><td class="px-3 py-1.5 text-slate-600" x-text="c.channel"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="formatRupiah(c.revenue)"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="c.count"></td></tr></template></tbody>
+                    </table>
+                </section>
+                <section class="card p-4 sm:p-5" aria-labelledby="h-prod">
+                    <h4 id="h-prod" class="font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600"><span x-html="icon('box', 'h-5 w-5')" class="inline-flex"></span></span>Produk terlaris</h4>
+                    <div x-show="!showTables" class="relative mt-3" :style="'height:' + (report.products.length * 38 + 16) + 'px'"><canvas id="chart-product" role="img" aria-label="Grafik produk terlaris"></canvas></div>
+                    <table x-show="showTables" class="w-full text-sm mt-3">
+                        <thead class="text-xs text-slate-600 bg-blush-100"><tr><th class="text-left font-semibold px-3 py-2 rounded-l-lg">Produk</th><th class="text-right font-semibold px-3 py-2">Terjual</th><th class="text-right font-semibold px-3 py-2 rounded-r-lg">Omset</th></tr></thead>
+                        <tbody><template x-for="p in report.products" :key="p.name"><tr class="border-t border-blush-100"><td class="px-3 py-1.5 text-slate-600" x-text="p.name"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="p.qty + ' pcs'"></td><td class="px-3 py-1.5 text-right tabular-nums" x-text="formatRupiah(p.revenue)"></td></tr></template></tbody>
+                    </table>
+                </section>
+            </div>
+
+            <!-- Riwayat lengkap -->
+            <section class="mt-8" aria-labelledby="h-list">
+                <div class="flex items-end justify-between gap-3">
+                    <h4 id="h-list" class="text-lg font-bold text-brand-900 flex items-center gap-2"><span class="text-brand-600"><span x-html="icon('receipt', 'h-5 w-5')" class="inline-flex"></span></span>Riwayat transaksi</h4>
+                    <p class="text-xs text-slate-500" x-text="histList.length + ' transaksi'"></p>
+                </div>
+
+                <!-- Cari, channel, urutan -->
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    <div class="relative col-span-2">
+                        <span class="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none"><span x-html="icon('search', 'h-5 w-5')" class="inline-flex"></span></span>
+                        <input type="search" x-model.debounce.250ms="histSearch" class="inp !pl-10" placeholder="Cari ID, channel, atau produk" aria-label="Cari transaksi" autocomplete="off">
+                    </div>
+                    <select x-model="histChannel" class="inp" aria-label="Filter channel">
+                        <option value="all">Semua channel</option>
+                        <template x-for="c in histChannels" :key="c"><option :value="c" x-text="c"></option></template>
+                    </select>
+                    <select x-model="histSort" class="inp" aria-label="Urutkan">
+                        <option value="new">Terbaru</option>
+                        <option value="old">Terlama</option>
+                        <option value="high">Omset tertinggi</option>
+                        <option value="low">Omset terendah</option>
+                    </select>
+                </div>
+
+                <!-- Status: tab bergaris bawah -->
+                <div class="flex gap-6 overflow-x-auto border-b border-blush-200 mt-2" style="scrollbar-width: none;">
+                    <template x-for="f in histStatusOptions" :key="f.key">
+                        <button @click="histStatus = f.key"
+                            class="shrink-0 py-3 text-sm whitespace-nowrap border-b-2 transition-colors focus-ring"
+                            :class="histStatus === f.key ? 'border-brand-600 text-brand-700 font-semibold' : 'border-transparent text-slate-500 hover:text-brand-600'">
+                            <span x-text="f.label"></span>
+                            <span class="ml-0.5 text-xs" :class="histStatus === f.key ? 'text-brand-500' : 'text-slate-400'" x-text="histCounts[f.key]"></span>
+                        </button>
+                    </template>
+                </div>
+
+                <!-- Baris transaksi: klik untuk lihat detail -->
+                <ul class="mt-3 card divide-y divide-blush-100 overflow-hidden" x-show="histList.length">
+                    <template x-for="s in histVisible" :key="s.id">
+                        <li>
+                            <button type="button" @click="openDetail(s)" class="w-full text-left flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-blush-50 transition focus-ring">
+                                <div class="h-10 w-10 shrink-0 rounded-xl bg-blush-100 text-brand-700 flex items-center justify-center" x-html="icon(channelIcon(s), 'h-5 w-5')"></div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <p class="font-semibold text-slate-800 truncate" x-text="s.channel"></p>
+                                        <span x-show="s.status === 'Batal'" class="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" :class="statusInfo.Batal.badge"><span x-html="icon('x-circle', 'h-3 w-3')" class="inline-flex"></span>Batal</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 truncate"><span x-text="s.id"></span> · <span x-text="formatDate(s.completed_at || s.date)"></span></p>
+                                    <p class="text-xs text-slate-500 truncate" x-text="s.items.map(i => i.product_name + ' ×' + i.qty).join(', ')"></p>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <p class="text-sm font-bold" :class="s.status === 'Batal' ? 'text-slate-400 line-through' : 'text-brand-700'" x-text="formatRupiah(s.summary.gross_revenue)"></p>
+                                    <p x-show="s.status !== 'Batal'" class="text-xs font-medium" :class="s.summary.net_profit < 0 ? 'text-red-600' : 'text-emerald-700'" x-text="formatRupiah(s.summary.net_profit)"></p>
+                                </div>
+                                <svg class="h-4 w-4 shrink-0 text-slate-300" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                            </button>
+                        </li>
+                    </template>
+                </ul>
+                <button x-show="histList.length > histLimit" @click="histLimit += 20" class="btn btn-ghost w-full mt-3 focus-ring"
+                    x-text="'Tampilkan lagi (' + (histList.length - histLimit) + ' lainnya)'"></button>
+
+                <div x-show="histList.length === 0" class="mt-3 rounded-2xl bg-white border border-dashed border-blush-300 p-10 text-center">
+                    <div class="mx-auto h-14 w-14 rounded-full bg-blush-100 text-brand-600 flex items-center justify-center"><span x-html="icon('receipt', 'h-7 w-7')" class="inline-flex"></span></div>
+                    <p class="mt-3 font-semibold text-slate-700" x-text="histFiltered ? 'Tidak ada transaksi yang cocok' : 'Belum ada riwayat di periode ini'"></p>
+                    <p class="text-sm text-slate-400 mt-1" x-text="histFiltered ? 'Coba ubah atau hapus filter.' : 'Pesanan selesai, dibatalkan, dan penjualan offline akan muncul di sini.'"></p>
+                    <button x-show="histFiltered" @click="resetHistFilters()" class="btn btn-ghost mt-4">Hapus filter</button>
+                </div>
+            </section>
+        </div>
+
+    </main>
+
+    <!-- ================= TOMBOL TAMBAH MELAYANG (HP): mengikuti tab aktif ================= -->
+    <button x-show="fab && !anyModalOpen" x-transition.opacity @click="fabAction()"
+        class="md:hidden fixed bottom-20 right-4 z-30 h-14 pl-4 pr-5 rounded-full bg-brand-600 text-white text-sm font-semibold shadow-lg shadow-brand-600/30 flex items-center gap-1.5 active:scale-95 transition focus-ring">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        <span x-text="fab"></span>
+    </button>
+
+    <!-- ================= BOTTOM TAB BAR (HP) ================= -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-blush-200 pb-[env(safe-area-inset-bottom)]">
+        <div class="grid grid-cols-5">
+            <template x-for="t in tabs" :key="t.key">
+                <button @click="activeTab = t.key" class="flex flex-col items-center gap-0.5 py-2 text-[11px] transition"
+                    :class="activeTab === t.key ? 'text-brand-600 font-semibold' : 'text-slate-400'">
+                    <span class="leading-none" x-html="icon(t.icon, 'h-6 w-6')"></span>
+                    <span x-text="t.label"></span>
+                </button>
+            </template>
+        </div>
+    </nav>
+
+    <!-- =====================================================================
+         MODAL: PRODUK (tambah / edit)
+         Form tidak menutup saat area gelap diklik, supaya data tidak hilang tak sengaja.
+         ===================================================================== -->
+    <div x-show="showProductModal" x-transition.opacity.duration.200ms class="modal-overlay z-50">
+        <div id="dlg-product" x-show="showProductModal"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave-end="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            role="dialog" aria-modal="true" aria-labelledby="dlg-product-title"
+            @keydown.tab="trapTab($event)"
+            class="modal-panel max-h-[92vh]">
+
+            <div class="modal-head">
+                <div class="flex items-center gap-3 min-w-0"><div class="ibub"><span x-html="icon('box', 'h-5 w-5')" class="inline-flex"></span></div><div class="min-w-0">
+                    <h3 id="dlg-product-title" class="text-lg font-bold text-brand-900" x-text="editingProductId ? 'Edit produk' : 'Tambah produk'"></h3>
+                    <p class="text-xs text-slate-500 mt-0.5" x-text="editingProductId ? 'Ubah detail produk atau koreksi stok.' : 'Daftarkan produk baru ke stok kamu.'"></p>
+                </div></div>
+                <button type="button" @click="closeProductModal()" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="submitProduct()" class="flex flex-col min-h-0 flex-1">
+                <div class="modal-body">
+                    <div x-show="modalError" role="alert" class="alert-error">
+                        <svg class="h-5 w-5 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                        <span x-text="modalError"></span>
+                    </div>
+
+                    <div x-show="editingProductId" class="bg-blush-100 border border-blush-300 text-brand-800 text-xs rounded-xl px-3 py-2.5 leading-relaxed">
+                        Mengubah stok di sini berarti koreksi stok manual. HPP baru hanya berlaku untuk penjualan berikutnya.
+                    </div>
+
+                    <div>
+                        <label class="lbl" for="p-name">Nama produk</label>
+                        <input id="p-name" type="text" x-model="newProduct.name" @input="modalError = ''" data-autofocus class="inp" placeholder="Cth: Tas Selempang Kulit" required autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="lbl" for="p-cat">Kategori</label>
+                        <input id="p-cat" type="text" x-model="newProduct.category" class="inp" placeholder="Cth: Tas / Aksesoris" autocomplete="off">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="lbl" for="p-base" x-text="editingProductId ? 'Modal / HPP (Rp)' : 'Harga modal (Rp)'"></label>
+                            <input id="p-base" type="number" inputmode="numeric" min="0" x-model.number="newProduct.base_price" @input="modalError = ''" class="inp" placeholder="0" required>
+                        </div>
+                        <div>
+                            <label class="lbl" for="p-sell">Harga jual (Rp)</label>
+                            <input id="p-sell" type="number" inputmode="numeric" min="0" x-model.number="newProduct.sell_price" @input="modalError = ''" class="inp" placeholder="0" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="lbl" for="p-stock" x-text="editingProductId ? 'Stok saat ini' : 'Stok awal'"></label>
+                        <input id="p-stock" type="number" inputmode="numeric" min="0" x-model.number="newProduct.stock" class="inp" placeholder="0" required>
+                    </div>
+
+                    <!-- Pratinjau margin -->
+                    <div x-show="newProduct.sell_price !== ''" class="rounded-xl bg-blush-100 border border-blush-200 px-4 py-3 text-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-600">Margin per pcs</span>
+                            <span class="font-semibold" :class="productMargin < 0 ? 'text-red-600' : 'text-brand-700'" x-text="formatRupiah(productMargin) + ' (' + productMarginPct + '%)'"></span>
+                        </div>
+                        <p x-show="productMargin < 0" class="text-xs text-red-600 mt-1.5">Harga jual di bawah modal, kamu rugi di setiap penjualan.</p>
+                    </div>
+                </div>
+
+                <div class="modal-foot pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button type="button" @click="closeProductModal()" class="btn btn-ghost flex-1 focus-ring">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-1 focus-ring" x-text="editingProductId ? 'Simpan perubahan' : 'Simpan produk'"></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         MODAL: RESTOK
+         ===================================================================== -->
+    <div x-show="showPurchaseModal" x-transition.opacity.duration.200ms class="modal-overlay z-50">
+        <div id="dlg-purchase" x-show="showPurchaseModal"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave-end="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            role="dialog" aria-modal="true" aria-labelledby="dlg-purchase-title"
+            @keydown.tab="trapTab($event)"
+            class="modal-panel sm:!max-w-2xl max-h-[92vh]">
+
+            <div class="modal-head">
+                <div class="flex items-center gap-3 min-w-0"><div class="ibub"><span x-html="icon('cart', 'h-5 w-5')" class="inline-flex"></span></div><div class="min-w-0">
+                    <h3 id="dlg-purchase-title" class="text-lg font-bold text-brand-900" x-text="editingPurchaseId ? 'Edit restok' : 'Catat restok'"></h3>
+                    <p class="text-xs text-slate-500 mt-0.5" x-text="editingPurchaseId ? editingPurchaseId : 'Stok bertambah dan HPP dihitung ulang otomatis.'"></p>
+                </div></div>
+                <button type="button" @click="closePurchaseModal()" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="submitPurchase()" class="flex flex-col min-h-0 flex-1">
+                <div class="modal-body space-y-6">
+                    <div x-show="modalError" role="alert" class="alert-error">
+                        <svg class="h-5 w-5 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                        <span x-text="modalError"></span>
+                    </div>
+
+                    <div x-show="editingPurchaseId" class="bg-blush-100 border border-blush-300 text-brand-800 text-xs rounded-xl px-3 py-2.5 leading-relaxed">
+                        Mengubah restok membatalkan efek lama (stok dan HPP) lalu menerapkan data baru. Tidak bisa jika sebagian barang dari restok ini sudah terjual.
+                    </div>
+
+                    <section class="space-y-3">
+                        <h4 class="modal-sec">Informasi belanja</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="lbl" for="r-sup">Supplier / toko kulakan</label>
+                                <input id="r-sup" type="text" x-model="newPurchase.supplier" class="inp" placeholder="Cth: Grosir Tanah Abang" autocomplete="off">
+                            </div>
+                            <div>
+                                <label class="lbl" for="r-ship">Total ongkir kulakan (Rp)</label>
+                                <input id="r-ship" type="number" inputmode="numeric" min="0" x-model.number="newPurchase.shipping_cost" class="inp" placeholder="0">
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-500">Ongkir dibagi rata per pcs, lalu HPP dihitung sebagai rata-rata tertimbang dengan stok yang masih ada.</p>
+                    </section>
+
+                    <section>
+                        <h4 class="modal-sec mb-3">Barang yang dibeli</h4>
+                        <template x-for="(item, index) in newPurchase.items" :key="index">
+                            <div class="rounded-2xl border border-blush-200 bg-blush-50 p-3 mb-3">
+                                <div class="flex gap-2 items-center">
+                                    <select @change="onProductSelectForPurchase(index); modalError = ''" x-model="item.product_id" :data-autofocus="index === 0 ? '' : null" class="inp flex-1 min-w-0" required aria-label="Produk">
+                                        <option value="">Pilih produk</option>
+                                        <template x-for="p in products" :key="p.id">
+                                            <option :value="p.id" :selected="p.id === item.product_id" x-text="p.name + ' (Stok: ' + p.stock + ')'"></option>
+                                        </template>
+                                    </select>
+                                    <button type="button" @click="removePurchaseItemRow(index)" class="icon-btn text-slate-400 hover:bg-blush-200 hover:text-brand-700 focus-ring" aria-label="Hapus baris">
+                                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div>
+                                        <label class="lbl">Qty</label>
+                                        <input type="number" inputmode="numeric" min="1" x-model.number="item.qty" class="inp" required>
+                                    </div>
+                                    <div>
+                                        <label class="lbl">Harga beli / pcs</label>
+                                        <input type="number" inputmode="numeric" min="0" x-model.number="item.base_price" class="inp" placeholder="0" required>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-slate-500 text-right mt-2" x-text="'Subtotal ' + formatRupiah((Number(item.qty) || 0) * (Number(item.base_price) || 0))"></p>
+                            </div>
+                        </template>
+                        <button type="button" @click="addPurchaseItemRow()" class="text-sm text-brand-600 hover:text-brand-800 font-semibold py-1 focus-ring rounded">+ Tambah barang lain</button>
+                    </section>
+
+                    <!-- Ringkasan -->
+                    <section class="rounded-2xl bg-blush-100 border border-blush-200 p-4 space-y-1.5 text-sm">
+                        <div class="flex justify-between"><span class="text-slate-600">Subtotal barang</span><span class="font-medium text-slate-800" x-text="formatRupiah(previewPurchaseSubtotal)"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">Ongkir</span><span class="font-medium text-slate-800" x-text="formatRupiah(newPurchase.shipping_cost)"></span></div>
+                        <p class="text-xs text-slate-500" x-text="'Ongkir per pcs: ' + formatRupiah(previewPurchaseShippingPerPcs)"></p>
+                        <div class="flex justify-between items-baseline pt-2 mt-1 border-t border-blush-300">
+                            <span class="font-semibold text-brand-800">Total belanja</span>
+                            <span class="text-lg font-bold text-brand-700" x-text="formatRupiah(previewPurchaseTotal)"></span>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="modal-foot pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button type="button" @click="closePurchaseModal()" class="btn btn-ghost flex-1 focus-ring">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-1 focus-ring" x-text="editingPurchaseId ? 'Simpan perubahan' : 'Simpan restok'"></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         MODAL: PENJUALAN (catat / edit)
+         ===================================================================== -->
+    <div x-show="showSaleModal" x-transition.opacity.duration.200ms class="modal-overlay z-50">
+        <div id="dlg-sale" x-show="showSaleModal"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave-end="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            role="dialog" aria-modal="true" aria-labelledby="dlg-sale-title"
+            @keydown.tab="trapTab($event)"
+            class="modal-panel sm:!max-w-2xl max-h-[92vh]">
+
+            <div class="modal-head">
+                <div class="flex items-center gap-3 min-w-0"><div class="ibub"><span x-html="icon('cash', 'h-5 w-5')" class="inline-flex"></span></div><div class="min-w-0">
+                    <h3 id="dlg-sale-title" class="text-lg font-bold text-brand-900" x-text="editingSaleId ? 'Edit transaksi' : 'Catat penjualan'"></h3>
+                    <p class="text-xs text-slate-500 mt-0.5" x-text="editingSaleId ? editingSaleId : 'Isi detail penjualan online atau offline.'"></p>
+                </div></div>
+                <button type="button" @click="closeSaleModal()" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Tutup">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <form @submit.prevent="submitSale()" class="flex flex-col min-h-0 flex-1">
+                <div class="modal-body space-y-6">
+                    <div x-show="modalError" role="alert" class="alert-error">
+                        <svg class="h-5 w-5 shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                        <span x-text="modalError"></span>
+                    </div>
+
+                    <div x-show="editingSaleId" class="bg-blush-100 border border-blush-300 text-brand-800 text-xs rounded-xl px-3 py-2.5 leading-relaxed">
+                        Stok lama dikembalikan lalu dihitung ulang dengan data baru. Kalau stok tidak cukup, perubahan ditolak.
+                    </div>
+
+                    <!-- Informasi -->
+                    <section class="space-y-3">
+                        <h4 class="modal-sec">Informasi</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="lbl" for="s-channel">Channel penjualan</label>
+                                <select id="s-channel" x-model="newSale.channel" data-autofocus class="inp">
+                                    <option value="Offline">Toko Fisik / Offline</option>
+                                    <option value="Shopee">Shopee</option>
+                                    <option value="Tokopedia">Tokopedia</option>
+                                    <option value="TikTok Shop">TikTok Shop</option>
+                                    <option value="WhatsApp">WhatsApp / Manual</option>
+                                </select>
+                            </div>
+                            <!-- Status hanya untuk online; offline langsung selesai -->
+                            <div x-show="newSale.channel !== 'Offline'">
+                                <label class="lbl" for="s-status">Status awal pesanan</label>
+                                <select id="s-status" x-model="newSale.status" class="inp">
+                                    <option value="Pending">Menunggu Pembayaran</option>
+                                    <option value="Dibayar">Sudah Dibayar</option>
+                                    <option value="Dikirim">Dalam Pengiriman</option>
+                                    <option value="Selesai">Selesai</option>
+                                    <option value="Batal">Batal</option>
+                                </select>
+                            </div>
+                            <div x-show="newSale.channel === 'Offline'" class="self-end text-xs text-brand-800 bg-blush-100 rounded-xl px-3 py-3 leading-snug">
+                                <span class="inline-flex align-middle mr-1"><span x-html="icon('store', 'h-4 w-4')" class="inline-flex"></span></span> Penjualan offline langsung dianggap selesai, tanpa status pesanan.
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Produk -->
+                    <section>
+                        <h4 class="modal-sec mb-3">Produk terjual</h4>
+                        <template x-for="(item, index) in newSale.items" :key="index">
+                            <div class="rounded-2xl border border-blush-200 bg-blush-50 p-3 mb-3">
+                                <div class="flex gap-2 items-center">
+                                    <select @change="onProductSelectForSale(index); modalError = ''" x-model="item.product_id" class="inp flex-1 min-w-0" required aria-label="Produk">
+                                        <option value="">Pilih produk</option>
+                                        <template x-for="p in products" :key="p.id">
+                                            <option :value="p.id" :selected="p.id === item.product_id" x-text="p.name + ' (Stok: ' + p.stock + ')'"></option>
+                                        </template>
+                                    </select>
+                                    <button type="button" @click="removeSaleItemRow(index)" class="icon-btn text-slate-400 hover:bg-blush-200 hover:text-brand-700 focus-ring" aria-label="Hapus baris">
+                                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div>
+                                        <label class="lbl">Qty</label>
+                                        <input type="number" inputmode="numeric" min="1" x-model.number="item.qty" @input="modalError = ''" class="inp" required>
+                                    </div>
+                                    <div>
+                                        <label class="lbl">Harga jual / pcs</label>
+                                        <input type="number" inputmode="numeric" min="0" x-model.number="item.sell_price" class="inp" placeholder="0" required>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-slate-500 text-right mt-2" x-text="'Subtotal ' + formatRupiah((Number(item.qty) || 0) * (Number(item.sell_price) || 0))"></p>
+                            </div>
+                        </template>
+                        <button type="button" @click="addSaleItemRow()" class="text-sm text-brand-600 hover:text-brand-800 font-semibold py-1 focus-ring rounded">+ Tambah produk lain</button>
+                    </section>
+
+                    <!-- Biaya -->
+                    <section class="space-y-3">
+                        <h4 class="modal-sec">Biaya operasional</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="lbl" for="s-pack">Packing</label>
+                                <input id="s-pack" type="number" inputmode="numeric" min="0" x-model.number="newSale.packing_fee" class="inp" placeholder="0">
+                            </div>
+                            <div>
+                                <label class="lbl" for="s-admin">Admin marketplace</label>
+                                <input id="s-admin" type="number" inputmode="numeric" min="0" x-model.number="newSale.platform_admin_fee" class="inp" placeholder="0">
+                            </div>
+                            <div>
+                                <label class="lbl" for="s-ship">Ongkir ditanggung seller</label>
+                                <input id="s-ship" type="number" inputmode="numeric" min="0" x-model.number="newSale.seller_shipping" class="inp" placeholder="0">
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Ringkasan -->
+                    <section class="rounded-2xl bg-blush-100 border border-blush-200 p-4 space-y-1.5 text-sm">
+                        <div class="flex justify-between"><span class="text-slate-600">Omset</span><span class="font-medium text-slate-800" x-text="formatRupiah(previewSaleGross)"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">Modal (HPP)</span><span class="font-medium text-slate-800" x-text="'− ' + formatRupiah(previewSaleHpp)"></span></div>
+                        <div class="flex justify-between"><span class="text-slate-600">Biaya operasional</span><span class="font-medium text-slate-800" x-text="'− ' + formatRupiah(previewSaleExpenses)"></span></div>
+                        <div class="flex justify-between items-baseline pt-2 mt-1 border-t border-blush-300">
+                            <span class="font-semibold text-brand-800">Estimasi laba bersih</span>
+                            <span class="text-lg font-bold" :class="previewSaleNetProfit < 0 ? 'text-red-600' : 'text-brand-700'" x-text="formatRupiah(previewSaleNetProfit)"></span>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="modal-foot pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button type="button" @click="closeSaleModal()" class="btn btn-ghost flex-1 focus-ring">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-1 focus-ring" x-text="editingSaleId ? 'Simpan perubahan' : 'Simpan penjualan'"></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         MODAL: DETAIL TRANSAKSI (dari tab Riwayat). Boleh ditutup dengan klik area gelap.
+         ===================================================================== -->
+    <div x-show="showDetailModal" x-transition.opacity.duration.200ms @mousedown.self="closeDetail()" class="modal-overlay z-50">
+        <div id="dlg-detail" x-show="showDetailModal"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave-end="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            role="dialog" aria-modal="true" aria-labelledby="dlg-detail-title"
+            @keydown.tab="trapTab($event)"
+            class="modal-panel max-h-[92vh]">
+
+            <template x-if="detailSale">
+                <div class="flex flex-col min-h-0 flex-1">
+                    <div class="modal-head">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="h-11 w-11 shrink-0 rounded-xl bg-blush-100 text-brand-700 flex items-center justify-center" x-html="icon(channelIcon(detailSale), 'h-6 w-6')"></div>
+                            <div class="min-w-0">
+                                <h3 id="dlg-detail-title" class="text-lg font-bold text-brand-900 truncate" x-text="detailSale.channel"></h3>
+                                <p class="text-xs text-slate-500 truncate" x-text="detailSale.id"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span x-show="!isOffline(detailSale) || detailSale.status === 'Batal'" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold" :class="statusInfo[detailSale.status]?.badge"><span x-html="icon(statusInfo[detailSale.status]?.icon, 'h-3 w-3')" class="inline-flex"></span><span x-text="statusInfo[detailSale.status]?.label"></span></span>
+                            <span x-show="isOffline(detailSale) && detailSale.status !== 'Batal'" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blush-100 text-brand-700 ring-1 ring-blush-300"><span x-html="icon('store', 'h-3 w-3')" class="inline-flex"></span>Offline</span>
+                            <button type="button" @click="closeDetail()" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Tutup">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="modal-body">
+                        <section>
+                            <h4 class="modal-sec mb-2 flex items-center gap-1.5"><span x-html="icon('calendar', 'h-4 w-4')" class="inline-flex"></span> Waktu</h4>
+                            <dl class="text-sm space-y-1">
+                                <div class="flex justify-between gap-3"><dt class="text-slate-500">Dicatat</dt><dd class="text-slate-800 text-right" x-text="formatDate(detailSale.date)"></dd></div>
+                                <div class="flex justify-between gap-3" x-show="detailSale.completed_at"><dt class="text-slate-500">Selesai</dt><dd class="text-slate-800 text-right" x-text="detailSale.completed_at ? formatDate(detailSale.completed_at) : ''"></dd></div>
+                            </dl>
+                        </section>
+
+                        <section>
+                            <h4 class="modal-sec mb-2 flex items-center gap-1.5"><span x-html="icon('box', 'h-4 w-4')" class="inline-flex"></span> Produk</h4>
+                            <ul class="rounded-2xl border border-blush-200 divide-y divide-blush-100">
+                                <template x-for="(i, idx) in detailSale.items" :key="idx">
+                                    <li class="px-3 py-2.5 flex justify-between gap-3 text-sm">
+                                        <div class="min-w-0">
+                                            <p class="font-medium text-slate-800" x-text="i.product_name"></p>
+                                            <p class="text-xs text-slate-500" x-text="i.qty + ' × ' + formatRupiah(i.sell_price) + '  ·  HPP ' + formatRupiah(i.hpp_unit)"></p>
+                                        </div>
+                                        <p class="font-semibold text-slate-800 shrink-0" x-text="formatRupiah(i.qty * i.sell_price)"></p>
+                                    </li>
+                                </template>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h4 class="modal-sec mb-2 flex items-center gap-1.5"><span x-html="icon('calculator', 'h-4 w-4')" class="inline-flex"></span> Rincian laba</h4>
+                            <dl class="rounded-2xl bg-blush-100 border border-blush-200 p-4 space-y-1.5 text-sm">
+                                <div class="flex justify-between"><dt class="text-slate-600">Omset</dt><dd class="font-medium text-slate-800" x-text="formatRupiah(detailSale.summary.gross_revenue)"></dd></div>
+                                <div class="flex justify-between"><dt class="text-slate-600">Modal (HPP)</dt><dd class="font-medium text-slate-800" x-text="'− ' + formatRupiah(detailSale.summary.total_hpp)"></dd></div>
+                                <div class="flex justify-between"><dt class="text-slate-500 pl-3">Packing</dt><dd class="text-slate-700" x-text="'− ' + formatRupiah(detailSale.expenses.packing_fee)"></dd></div>
+                                <div class="flex justify-between"><dt class="text-slate-500 pl-3">Admin marketplace</dt><dd class="text-slate-700" x-text="'− ' + formatRupiah(detailSale.expenses.platform_admin_fee)"></dd></div>
+                                <div class="flex justify-between"><dt class="text-slate-500 pl-3">Ongkir ditanggung seller</dt><dd class="text-slate-700" x-text="'− ' + formatRupiah(detailSale.expenses.seller_shipping)"></dd></div>
+                                <div class="flex justify-between items-baseline pt-2 mt-1 border-t border-blush-300">
+                                    <dt class="font-semibold text-brand-800">Laba bersih</dt>
+                                    <dd class="text-lg font-bold" :class="detailSale.summary.net_profit < 0 ? 'text-red-600' : 'text-brand-700'" x-text="formatRupiah(detailSale.summary.net_profit)"></dd>
+                                </div>
+                            </dl>
+                            <p x-show="detailSale.status === 'Batal'" class="text-xs text-slate-500 mt-2">Transaksi batal tidak dihitung sebagai omset maupun laba.</p>
+                        </section>
+                    </div>
+
+                    <div class="modal-foot pb-[max(1rem,env(safe-area-inset-bottom))]">
+                        <button type="button" @click="deleteFromDetail()" class="btn bg-white border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('trash', 'h-4 w-4')" class="inline-flex"></span> Hapus</button>
+                        <button type="button" @click="editFromDetail()" class="btn btn-ghost flex-1 inline-flex items-center justify-center gap-1.5 focus-ring"><span x-html="icon('edit', 'h-4 w-4')" class="inline-flex"></span> Edit</button>
+                        <button type="button" data-autofocus @click="closeDetail()" class="btn btn-primary flex-1 focus-ring">Tutup</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         MODAL: DATA & BACKUP (ekspor Excel, backup JSON, pulihkan)
+         ===================================================================== -->
+    <div x-show="showDataModal" x-transition.opacity.duration.200ms @mousedown.self="closeDataModal()" class="modal-overlay z-50">
+        <div id="dlg-data" x-show="showDataModal"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+            x-transition:leave-end="opacity-0 translate-y-6 sm:translate-y-0 sm:scale-95"
+            role="dialog" aria-modal="true" aria-labelledby="dlg-data-title"
+            @keydown.tab="trapTab($event)"
+            class="modal-panel max-h-[92vh]">
+
+            <div class="modal-head">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="ibub" x-html="icon('database', 'h-5 w-5')"></div>
+                    <div class="min-w-0">
+                        <h3 id="dlg-data-title" class="text-lg font-bold text-brand-900">Data &amp; backup</h3>
+                        <p class="text-xs text-slate-500 mt-0.5" x-text="products.length + ' produk · ' + purchases.length + ' restok · ' + sales.length + ' transaksi'"></p>
+                    </div>
+                </div>
+                <button type="button" @click="closeDataModal()" class="icon-btn text-slate-400 hover:bg-blush-100 hover:text-brand-700 focus-ring" aria-label="Tutup">
+                    <span x-html="icon('x', 'h-5 w-5', 2)" class="inline-flex"></span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div x-show="modalError" role="alert" class="alert-error">
+                    <span class="shrink-0 mt-px" x-html="icon('alert', 'h-5 w-5')"></span>
+                    <span x-text="modalError"></span>
+                </div>
+
+                <!-- Backup -->
+                <section class="rounded-2xl border border-blush-200 p-4">
+                    <h4 class="font-semibold text-slate-800 flex items-center gap-2"><span class="text-brand-600" x-html="icon('shield', 'h-5 w-5')"></span>Backup data</h4>
+                    <p class="text-sm text-slate-500 mt-1 leading-relaxed">Simpan seluruh data (produk, restok, penjualan) ke satu file. Data aplikasi ini tersimpan di browser, jadi hilang kalau data browser dihapus. Simpan file backup di tempat aman.</p>
+                    <p class="text-xs mt-2 font-medium" :class="backupStale ? 'text-amber-700' : 'text-emerald-700'" x-text="backupLabel"></p>
+                    <button type="button" data-autofocus @click="downloadBackup()" class="btn btn-primary w-full mt-3 inline-flex items-center justify-center gap-2 focus-ring">
+                        <span x-html="icon('download', 'h-5 w-5')" class="inline-flex"></span> Unduh backup (.json)</button>
+                </section>
+
+                <!-- Restore -->
+                <section class="rounded-2xl border border-blush-200 p-4">
+                    <h4 class="font-semibold text-slate-800 flex items-center gap-2"><span class="text-brand-600" x-html="icon('upload', 'h-5 w-5')"></span>Pulihkan dari backup</h4>
+                    <p class="text-sm text-slate-500 mt-1 leading-relaxed">Pilih file backup yang pernah diunduh. Semua data saat ini akan diganti. Sebelum mengganti, backup data saat ini diunduh otomatis sebagai pengaman.</p>
+                    <input x-ref="restoreFile" type="file" accept=".json,application/json" class="hidden" @change="onRestoreFile($event)">
+                    <button type="button" @click="$refs.restoreFile.click()" class="btn btn-ghost w-full mt-3 inline-flex items-center justify-center gap-2 focus-ring">
+                        <span x-html="icon('upload', 'h-5 w-5')" class="inline-flex"></span> Pilih file backup</button>
+                </section>
+
+                <!-- Excel -->
+                <section class="rounded-2xl border border-blush-200 p-4">
+                    <h4 class="font-semibold text-slate-800 flex items-center gap-2"><span class="text-emerald-600" x-html="icon('sheet', 'h-5 w-5')"></span>Ekspor ke Excel</h4>
+                    <p class="text-sm text-slate-500 mt-1 leading-relaxed">Satu file .xlsx berisi 5 sheet: Ringkasan, Penjualan, Item Penjualan, Produk, dan Restok. Bisa dibuka di Excel, Google Sheets, atau WPS.</p>
+                    <button type="button" @click="exportExcelAll()" class="btn btn-ghost w-full mt-3 inline-flex items-center justify-center gap-2 focus-ring">
+                        <span x-html="icon('sheet', 'h-5 w-5')" class="inline-flex"></span> Unduh laporan Excel (.xlsx)</button>
+                </section>
+            </div>
+
+            <div class="modal-foot pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <button type="button" @click="closeDataModal()" class="btn btn-ghost flex-1 focus-ring">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================================
+         MODAL: KONFIRMASI (hapus / batalkan). Fokus awal di tombol "Batal"
+         agar aksi merusak tidak terpicu tak sengaja. Klik area gelap = batal.
+         ===================================================================== -->
+    <div x-show="confirmDlg.show" x-transition.opacity.duration.200ms @mousedown.self="confirmNo()"
+        class="modal-overlay !items-center p-4 z-[70]">
+        <div id="dlg-confirm" x-show="confirmDlg.show"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 scale-100"
+            x-transition:leave-end="opacity-0 scale-95"
+            role="alertdialog" aria-modal="true" aria-labelledby="dlg-confirm-title" aria-describedby="dlg-confirm-msg"
+            @keydown.tab="trapTab($event)"
+            class="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6">
+
+            <div class="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-4">
+                <div class="h-11 w-11 shrink-0 rounded-full flex items-center justify-center"
+                    :class="confirmDlg.danger ? 'bg-red-50 text-red-600' : 'bg-blush-100 text-brand-700'">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <h3 id="dlg-confirm-title" class="text-lg font-bold text-slate-900" x-text="confirmDlg.title"></h3>
+                    <p id="dlg-confirm-msg" class="text-sm text-slate-500 mt-1 leading-relaxed" x-text="confirmDlg.message"></p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <button type="button" data-autofocus @click="confirmNo()" class="btn btn-ghost sm:min-w-[96px] focus-ring" x-text="confirmDlg.cancelText"></button>
+                <button type="button" @click="confirmYes()" class="btn sm:min-w-[96px] focus-ring" :class="confirmDlg.danger ? 'btn-danger' : 'btn-primary'" x-text="confirmDlg.confirmText"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TOAST (selalu di atas modal) ================= -->
+    <div x-show="toast.show" x-transition role="status" aria-live="polite"
+        class="fixed z-[90] bottom-20 md:bottom-6 inset-x-4 md:inset-x-auto md:right-6 md:max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-2.5"
+        :class="toast.type === 'error' ? 'bg-red-600' : 'bg-brand-900'"
+        @click="toast.show = false">
+        <span class="shrink-0 mt-px" x-html="icon(toast.type === 'error' ? 'alert' : 'check-circle', 'h-5 w-5')"></span>
+        <span x-text="toast.msg"></span>
+    </div>
+
+    <!-- Load Controller Script -->
+    <script src="database.js"></script>
+    <script src="report.js"></script>
+    <script src="xlsx.js"></script>
+    <script src="backup.js"></script>
+    <script src="icons.js"></script>
+    <script src="appcontroller.js"></script>
+</body>
+</html>
